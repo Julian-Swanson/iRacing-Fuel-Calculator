@@ -9,6 +9,7 @@ import threading
 ir = irsdk.IRSDK()
 
 availability = ['', 0]
+calculating_fuel_status = ['Calculating status', 'red']
 
 fuel_capacity = 0
 fuel_current = 0
@@ -43,9 +44,32 @@ minute_var = tk.StringVar()
 seconds_var = tk.StringVar()
 pitstop_var = tk.StringVar()
 
-#CHECKBOX
-
 toggle_iracing_var = tk.IntVar()
+
+fuel1_value = 0
+fuel2_value = 1
+fuel3_value = 2
+lapavg_value = 3
+hour_value = 4
+minute_value = 5
+seconds_value = 6
+pitstop_value = 7
+
+label_entry_list_name = ['fuel1_label', 'fuel2_label', 'fuel3_label', 'lapavg_label', 'hour_label', 'minute_label', 'seconds_label', 'pitstop_label']
+label_entry_list_text = ['Max fuel capacity in litres', 'Current fuel in litres', 'Average fuel usage per lap in litres', 'Average lap time in seconds', 'Hours', 'Minutes', 'Seconds', 'Pitstop time in seconds']
+
+entry_list_name = ['fuel1_entry', 'fuel2_entry', 'fuel3_entry', 'lapavg_entry', 'hour_entry', 'minute_entry', 'seconds_entry', 'pitstop_entry']
+entry_list_var = [fuel1_var, fuel2_var, fuel3_var, lapavg_var, hour_var, minute_var, seconds_var, pitstop_var]
+
+label_dict = {}
+entry_dict = {}
+
+def label_entry_dict_maker():
+    for a, b, x, y, z in zip(entry_list_name, entry_list_var, label_entry_list_name, label_entry_list_text, range(0, len(label_entry_list_name))):
+        x = ttk.Label(master, text=y)
+        label_dict[z] = x
+        a = ttk.Entry(master, textvariable=b)
+        entry_dict[z] = a
 
 ###-----------------FUNCTIONS-----------------###
 
@@ -64,6 +88,7 @@ def iracing_startup_notifications():
 def check_status():
 
     global availability
+    global iracing_fuel_data_off
 
     if iracing_fuel_data_off:
         
@@ -73,15 +98,15 @@ def check_status():
 
         availability = ['iRacing not running', 1]
 
-    elif (ir['FuelCapacity'] == None):
+    elif (ir['FuelCapacity'] == None) and not iracing_fuel_data_off:
 
         availability = ["Fuel capacity data from iRacing not being transmitted.", 2]
 
     elif (ir['FuelLevel'] == None):
        
-        availability = ["Fuel capacity data from iRacing not being transmitted.", 3]
+        availability = ["Fuel level data from iRacing not being transmitted.", 3]
 
-    elif (ir['FuelCapacity'] == None) and (ir['FuelLevel'] == None):
+    elif (ir['FuelCapacity'] == None) and (ir['FuelLevel'] == None) and not iracing_fuel_data_off:
         
         availability = ["No data from iRacing transmitted.", 1]
     
@@ -120,6 +145,7 @@ def fuel_average_calculator():
                         fuel_avg_lap = sum(fuel_consumption_per_lap) / len(fuel_consumption_per_lap)
                         print(f"Average Fuel Per Lap: {fuel_avg_lap:.2f} L")                        
                         data_submit()
+                        calculating_label.configure(text="Fuel calculated", background='green')
                         break
 
                 fuel_start = current_fuel
@@ -139,11 +165,7 @@ def lap_check():
 
     print("lap check called")
 
-    global stop_lap_check
-    
-    stop_lap_check = False
     previous_lap = None
-
 
     while True:
 
@@ -158,7 +180,8 @@ def lap_check():
         
         elif previous_lap < current_lap:
             print("called step 3")
-            fuel_average_calculator()
+            calculating_label.configure(text='Calculating fuel average...', background='yellow')
+            master.after(200, fuel_average_calculator)
             break
 
         else:
@@ -170,103 +193,112 @@ def data_submit():
     global output1
     global output2
     global output3
+    global output4
     global fuel_avg_lap
     global availability
+    
+    try:
+        check_status()
+        print(availability[0])
 
-    check_status()
+        output1.delete('1.0', 'end')
+        output2.delete('1.0', 'end')
+        output3.delete('1.0', 'end')
+        output4.delete('1.0', 'end')
 
-    output1.delete('1.0', 'end')
-    output2.delete('1.0', 'end')
-    output3.delete('1.0', 'end')
+        if availability[1] == 1:
 
-    if availability[1] == 1:
+            fuel_capacity = float(fuel1_var.get())
+            fuel_current = float(fuel2_var.get())
+            fuel_avg_lap = float(fuel3_var.get())
 
-        fuel_capacity = float(fuel1_var.get())
-        fuel_current = float(fuel2_var.get())
-        fuel_avg_lap = float(fuel3_var.get())
+        elif availability[1] == 2:
 
-    elif not iracing_fuel_data_off and availability[1] == 2:
+            fuel_capacity = float(fuel1_var.get())
+            fuel_current = ir['FuelLevel']
 
-        fuel_capacity = float(fuel1_var.get())
-        fuel_current = ir['FuelLevel']
+            print(fuel_capacity, fuel_current)
+            
+            if fuel_avg_lap == None:
+                print("Wait")
+            
+            else:
+                print(fuel_avg_lap)
 
-        print(fuel_capacity, fuel_current)
+        elif availability[1] == 3:
         
-        if fuel_avg_lap == None:
-            print("Wait")
-        
+            fuel_capacity = ir['FuelCapacity']
+            fuel_current = float(fuel2_var.get())
+            fuel_avg_lap = float(fuel3_var.get())
+
         else:
+
+            fuel_capacity = ir['FuelCapacity']
+            fuel_current = ir['FuelLevel']
+
+            print(fuel_capacity, fuel_current)
             print(fuel_avg_lap)
 
-    elif not iracing_fuel_data_off and availability[1] == 3:
-       
-        fuel_capacity = ir['FuelCapacity']
-        fuel_current = float(fuel2_var.get())
-        fuel_avg_lap = float(fuel3_var.get())
 
+
+        avg_lap_time = float(lapavg_var.get())
+        time_hours = float(hour_var.get())
+        time_minutes = float(minute_var.get())
+        time_seconds = float(seconds_var.get())
+        pit_stop_time = float(pitstop_var.get())
+        
+        fuel_counter = fuel_current
+        lap_counter = 0
+        pit_stop_counter = 0
+        time_counter = (time_hours*3600)+(time_minutes*60)+time_seconds
+
+        if fuel_avg_lap == None:
+            print("wait")
+        
+        if fuel_counter == None:
+            print("whiuf")
+
+        while True:
+
+            if time_counter > 0:
+                if (fuel_counter > fuel_avg_lap*1.02):
+                    fuel_counter -= fuel_avg_lap
+                    lap_counter += 1
+                    time_counter -= avg_lap_time
+                else: #elif (fuel_counter <= fuel_avg_lap):
+                    time_counter -= (pit_stop_time+avg_lap_time)
+                    pit_stop_counter += 1
+                    lap_counter += 1
+                    fuel_counter = fuel_capacity - fuel_avg_lap
+            else:            
+                total_fuel = lap_counter*fuel_avg_lap
+                laps_across_stint = fuel_capacity // fuel_avg_lap
+                final_laps_stint = lap_counter % laps_across_stint
+                final_fuel_stint = final_laps_stint * fuel_avg_lap
+
+                if final_fuel_stint == 0:
+                    final_fuel_stint = fuel_capacity
+
+                info = ('laps: '+str(lap_counter)+' Pit stops: '+str(pit_stop_counter)+' Final fuel stint: '+str(final_fuel_stint)) 
+
+                print(total_fuel)
+                print(info)
+                output1.insert(tk.END, lap_counter)
+                output2.insert(tk.END, pit_stop_counter)
+                output3.insert(tk.END, final_fuel_stint)
+                output4.insert(tk.END, fuel_avg_lap)
+                break
+    except KeyboardInterrupt:
+        print("Exiting...")
     else:
-
-        fuel_capacity = ir['FuelCapacity']
-        fuel_current = ir['FuelLevel']
-
-        print(fuel_capacity, fuel_current)
-        print(fuel_avg_lap)
-
-
-
-    avg_lap_time = float(lapavg_var.get())
-    time_hours = float(hour_var.get())
-    time_minutes = float(minute_var.get())
-    time_seconds = float(seconds_var.get())
-    pit_stop_time = float(pitstop_var.get())
-    
-    fuel_counter = fuel_current
-    lap_counter = 0
-    pit_stop_counter = 0
-    done = False
-    time_counter = (time_hours*3600)+(time_minutes*60)+time_seconds
-
-    if fuel_avg_lap == None:
-        print("wait")
-    
-    if fuel_counter == None:
-        print("whiuf")
-
-    while done == False:
-
-        if time_counter > 0:
-            if (fuel_counter >= fuel_avg_lap):
-                fuel_counter -= fuel_avg_lap
-                lap_counter += 1
-                time_counter -= avg_lap_time
-            elif (fuel_counter <= fuel_avg_lap):
-                time_counter -= (pit_stop_time+avg_lap_time)
-                lap_counter += 1
-                fuel_counter = fuel_capacity
-                pit_stop_counter += 1
-        else:
-            done = True
-            
-            total_fuel = lap_counter*fuel_avg_lap
-            laps_across_stint = fuel_capacity // fuel_avg_lap
-            final_laps_stint = lap_counter % laps_across_stint
-            final_fuel_stint = final_laps_stint * fuel_avg_lap
-
-            if final_fuel_stint == 0:
-                final_fuel_stint = fuel_capacity
-
-            info = ('laps: '+str(lap_counter)+' Pit stops: '+str(pit_stop_counter)+' Final fuel stint: '+str(final_fuel_stint)) 
-
-            print(total_fuel)
-            print(info)
-            output1.insert(tk.END, lap_counter)
-            output2.insert(tk.END, pit_stop_counter)
-            output3.insert(tk.END, final_fuel_stint)
+        print("Error")
+    finally:
+        print("Finished Calculation")
     
 
 def return_pressed(event):
     
-    if master.focus_get() == pitstop_entry:
+    if master.focus_get() == entry_dict[pitstop_value]:
         print("worked")
         calculate_choose()
     else:
@@ -298,13 +330,17 @@ def toggle_iracing():
 
 def calculate_choose():
 
-    if toggle_iracing_var.get() == 1 and ir.is_connected:
-        lap_check()
-    elif not ir.is_connected:
+    global availability
+
+    if availability[1] == 2 or availability[1] == 4:
+        
+        calculating_label.configure(text='Calculating laps...', background='orange')    
+        master.after(200, lap_check)
+    
+    elif availability[1] == 1:
         data_submit()
     else:
         data_submit()
-
 
 def delete_ui():
 
@@ -316,37 +352,24 @@ def create_ui():
     global output1
     global output2
     global output3
-    global pitstop_entry
-    global iracing_fuel_data_off
+    global output4
     global iracing_connected_label
     global torf_iracing_color
     global availability
+    global calculating_label
 
+    label_entry_dict_maker()
 
     top_label = ttk.Label(master, text = 'Please add some margin so that there are not any huge mistakes.'
                      , background='gainsboro', foreground='dodgerblue', font=('Helvetica', 11))
-
-    fuel1_label = ttk.Label(master, text = "Max fuel capacity in litres")
-    fuel1_entry = ttk.Entry(master, textvariable = fuel1_var, style='Custom.TEntry')
-    fuel2_label = ttk.Label(master, text = "Current fuel in litres")
-    fuel2_entry = ttk.Entry(master, textvariable = fuel2_var, style='Custom.TEntry')
-    fuel3_label = ttk.Label(master, text = "Average fuel usage per lap in litres")
-    fuel3_entry = ttk.Entry(master, textvariable = fuel3_var, style='Custom.TEntry')
-    lapavg_label = ttk.Label(master, text = "Average laptime in seconds")
-    lapavg_entry = ttk.Entry(master, textvariable = lapavg_var, style='Custom.TEntry')
-    hour_label = ttk.Label(master, text = "Hours remaining")
-    hour_entry = ttk.Entry(master, textvariable = hour_var, style='Custom.TEntry')
-    minute_label = ttk.Label(master, text = "Minutes remaining")
-    minute_entry = ttk.Entry(master, textvariable = minute_var, style='Custom.TEntry')
-    seconds_label = ttk.Label(master, text = "Seconds remaining")
-    seconds_entry = ttk.Entry(master, textvariable = seconds_var, style='Custom.TEntry')
-    pitstop_label = ttk.Label(master, text = "Pitstop time in seconds")
-    pitstop_entry = ttk.Entry(master, textvariable = pitstop_var, style='Custom.TEntry')
     
     iracing_connected_label = ttk.Label(master, text= availability[0], background=torf_iracing_color, font=('Arial', 10, 'bold'))
 
     submit_button = ttk.Button(master, text = "Calculate", command = calculate_choose)
-    toggle_iracing_button = tk.Checkbutton(master, text="Toggle iRacing Fuel Data", variable=toggle_iracing_var, onvalue=1, offvalue=0
+
+    calculating_label = ttk.Label(master, text = 'Calculating status', background='red')
+
+    toggle_iracing_button = ttk.Checkbutton(master, text="Toggle iRacing Fuel Data", variable=toggle_iracing_var, onvalue=1, offvalue=0
                                         , command=toggle_iracing)
 
     space_label = ttk.Label(master, text = '')
@@ -357,50 +380,50 @@ def create_ui():
     output2_label = ttk.Label(master, text='Total pit stops')
     output3 = tk.Text(master, height = 2, width = 52)
     output3_label = ttk.Label(master, text='Litres for final stint')
+    output4 = tk.Text(master, height = 2, width = 52)
+    output4_label = ttk.Label(master, text='Fuel average')
 
     master.bind("<Return>", return_pressed)
     master.bind("<Up>", up_key_pressed)
     master.bind("<Down>", down_key_pressed)
 
+    ###.pack items###
+    
     top_label.pack()
 
     check_status()
 
     if availability[1] == 1:
-        fuel1_label.pack()
-        fuel1_entry.pack()
-        fuel2_label.pack()
-        fuel2_entry.pack()
-        fuel3_label.pack()
-        fuel3_entry.pack()
+        label_dict[fuel1_value].pack()
+        entry_dict[fuel1_value].pack()
+        label_dict[fuel2_value].pack()
+        entry_dict[fuel2_value].pack()
+        label_dict[fuel3_value].pack()
+        entry_dict[fuel3_value].pack()
         master.geometry('500x650')
 
     if availability[1] == 2:
-        fuel1_label.pack()
-        fuel1_entry.pack()
-        master.geometry('500x550')
+        label_dict[fuel1_value].pack()
+        entry_dict[fuel1_value].pack()
+        master.geometry('500x600')
 
     if availability[1] == 3:
-        fuel2_label.pack()
-        fuel2_entry.pack()
-        fuel3_label.pack()
-        fuel3_entry.pack()
+        label_dict[fuel2_value].pack()
+        entry_dict[fuel2_value].pack()
+        label_dict[fuel3_value].pack()
+        entry_dict[fuel3_value].pack()
         master.geometry('500x600') 
 
-    lapavg_label.pack()
-    lapavg_entry.pack()
-    hour_label.pack()
-    hour_entry.pack()
-    minute_label.pack()
-    minute_entry.pack()
-    seconds_label.pack()
-    seconds_entry.pack()
-    pitstop_label.pack()
-    pitstop_entry.pack()
+    for n in range(3, 8):
+        label_dict[n].pack()
+        entry_dict[n].pack()
+
+    submit_button.pack()
+    
+    if (availability[1]) == (2 or 4):
+        calculating_label.pack()
 
     toggle_iracing_button.pack()
-    
-    submit_button.pack()
 
     space_label.pack()
 
@@ -410,6 +433,9 @@ def create_ui():
     output2.pack()
     output3_label.pack()
     output3.pack()
+    if availability[1] == 2 or availability[1] == 4:
+        output4_label.pack()
+        output4.pack()
     iracing_connected_label.pack()
 
 def connected_status():
@@ -422,6 +448,8 @@ def connected_status():
     else:
         torf_iracing_color = "Red"
 
+    check_status()
+
     iracing_connected_label.configure(text=availability[0], background=torf_iracing_color)
     master.after(1, connected_status)
 
@@ -429,4 +457,3 @@ create_ui()
 iracing_startup_notifications()
 connected_status()
 master.mainloop()
-
